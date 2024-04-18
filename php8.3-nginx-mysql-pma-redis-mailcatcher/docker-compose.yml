@@ -1,0 +1,92 @@
+version: '3'
+
+services:
+  nginx:
+    image: nginx:stable-alpine3.17-slim
+    container_name: nginx
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./src:/var/www"
+      - "./docker/certs/localhost.crt:/etc/ssl/certs/localhost.crt"
+      - "./docker/certs/localhost.key:/etc/ssl/private/localhost.key"
+      - "./docker/nginx:/etc/nginx/conf.d/"
+    depends_on:
+      - phpapp
+    networks:
+      - app
+
+  phpapp:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: phpapp
+    image: dockerbarn:php8.3-nginx-mysql-pma-redis-mailcatcher
+    restart: unless-stopped
+    tty: true
+    env_file: "./docker/php/.env.dev"
+    working_dir: "/var/www"
+    volumes:
+      - "./src:/var/www"
+    depends_on:
+      - mysql
+      - redis
+      - mailcatcher
+    networks:
+      - app
+
+  mysql:
+    container_name: mysql
+    image: mysql:8
+    restart: unless-stopped
+    tty: true
+    volumes:
+      - "./docker/mysql:/var/lib/mysql"
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: app
+      MYSQL_ROOT_PASSWORD: root
+    networks:
+      - app
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:5.2.1
+    container_name: phpmyadmin
+    links:
+      - mysql
+    environment:
+      PMA_HOST: mysql
+      MYSQL_ROOT_PASSWORD: root
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 300M
+    restart: always
+    ports:
+      - "8080:80"
+    networks:
+      - app
+
+  redis:
+    container_name: redis
+    image: redis:alpine3.19
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - app
+
+  mailcatcher:
+    container_name: mailcatcher
+    restart: on-failure:10
+    image: dockage/mailcatcher:0.7.1
+    ports:
+      - 1080:1080
+      - 1025:1025
+    networks:
+      - app
+
+networks:
+  app:
